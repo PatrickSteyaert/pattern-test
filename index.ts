@@ -9,26 +9,17 @@ appDiv.innerHTML = `<h1>Pattern test</h1>`;
 interface Pattern<T> { [key: string]: T; } ;
 
 type Strand = string | Pattern<Strand>;
-type Yarn = Strand | Array<Strand> ;
+type Yarn = Array<Strand> ;
 
-type Clause = string | RegExp | Pattern<Filter> ;
+type BaseClause = string | RegExp | Pattern<Filter> ;
+type OrClause = Set<BaseClause> ;
 
-type Filter = Clause | Set<Clause> ;
-type MatchExpression = Map<Clause, any>;
+type Filter = BaseClause | OrClause ;
 
-function isSourceAtomPattern(source: SourcePattern): boolean {
-  return typeof source === 'string' || source instanceof RegExp;
-}
+type MatchExpression = Map<BaseClause, any>;
 
-function isTargetAtomPattern(target: TargetPattern): boolean {
-  return typeof target === 'string';
-}
 
-function isSourceChoicePattern(source: SourcePattern): boolean {
-  return source instanceof Set;
-}
-
-function filter(...clauses: Clause[]): Filter {
+function orClause(...clauses: BaseClause[]): Filter {
   return new Set(clauses);
 }
 
@@ -36,46 +27,56 @@ function yarn(...strands: Strand[]): Yarn {
   return strands;
 }
 
-function matchAtomPatterns(source: SourceAtomPattern, target: TargetAtomPattern): boolean {
-  if (source instanceof RegExp && typeof target === 'string') {
-    return source.test(target);
-  } else if (typeof source === 'string' && typeof target === 'string') {
-    return source === target;
-  }
+function isOrClause(filter: Filter): boolean {
+  return filter instanceof Set;
 }
 
-function matchChoicePattern(source: SourceChoicePattern, target: TargetPattern): boolean {
-  if (source.has(target)) {
-    return true;
-  } else {
-    return !!Array.from(source).find((element) => match(element, target));
-  }
-}
-
-function matchObjectPatterns(source: SourceObjectPattern, target: TargetObjectPattern): boolean {
+function testPatterns(strand: Pattern<Strand>, clause: Pattern<Filter>): boolean {
   let result = true;
-  for (const key in target) {
-    if (target.hasOwnProperty(key)) {
-      if (match(new Set(Object.keys(source)), key)) {
-        result = result && match(source[key], target[key]);
+  for (const key in clause) {
+    if (clause.hasOwnProperty(key)) {
+      if (test(key, new Set(Object.keys(clause)))) {
+        result = result && test(strand[key], clause[key]);
       }
     }
   }
   return result;
 }
 
-function match(source: SourcePattern, target: TargetPattern): boolean {
-  if (isSourceAtomPattern(source) && isTargetAtomPattern(target)) {
-    return matchAtomPatterns(source as SourceAtomPattern, target as TargetAtomPattern);
-  } else if (isSourceChoicePattern(source)) {
-    return matchChoicePattern(source as SourceChoicePattern, target);
-  } else if (typeof source === 'object' && typeof target === 'object') {
-    return matchObjectPatterns(source as SourceObjectPattern, target);
+function testBaseClause(strand: Strand, baseClause: BaseClause): boolean {
+  if (typeof strand === 'string' && typeof baseClause === 'string') {
+    return strand === baseClause;
+  } else if (typeof strand === 'string' && baseClause instanceof RegExp ) {
+    return baseClause.test(strand);
+  } else {
+    return 
   }
 }
 
+function testOrClause(strand: Strand, orClause: OrClause): boolean {
+  if (orClause.has(strand)) {
+    return true;
+  } else {
+    return !!Array.from(orClause).find((clause) => test(strand, clause));
+  }
+}
+
+function test(strand: Strand, filter: Filter): boolean {
+  if (isOrClause(filter)) {
+    return testOrClause(strand, filter as OrClause);
+  } else {
+    return testBaseClause(strand, filter as BaseClause)
+  }
+}
+
+function filter(yarn: Yarn, filter: Filter): Yarn {
+  yarn.filter(strand => {
+    test(strand, filter)
+  })
+}
+
 const sourceString: Strand = 's';
-const matchAll: Clause = /(.*?)/;
+const matchAll: BaseClause = /(.*?)/;
 
 console.log(match(sourceString, 'a'));
 console.log(typeof ['a', 'b']);
@@ -96,12 +97,12 @@ enum CoS {
 
 const WorkItemPattern: Filter = {
   entity: EntityType.WorkItem,
-  state: filter(State.s1, State.s2),
+  state: orClause(State.s1, State.s2),
 };
 
 const ActiveWorkItemPattern: Filter = {
   entity: EntityType.WorkItem,
-  state: filter(State.s1),
+  state: orClause(State.s1),
 };
 
 const activeWorkItem: Strand = {
@@ -116,8 +117,16 @@ const inActiveWorkItem: Strand = {
 
 const testYarn: Yarn = yarn(activeWorkItem, inActiveWorkItem)
 
-console.log(match(WorkItemPattern, activeWorkItem));
-console.log(match(ActiveWorkItemPattern, activeWorkItem));
+console.log('Work item tests');
+console.log(test(activeWorkItem, WorkItemPattern));
+console.log(test(inActiveWorkItem, WorkItemPattern));
 
-console.log(match(WorkItemPattern, inActiveWorkItem));
-console.log(match(ActiveWorkItemPattern, inActiveWorkItem));
+console.log();
+console.log('Active item test');
+console.log(test(activeWorkItem, ActiveWorkItemPattern));
+console.log(test(inActiveWorkItem, ActiveWorkItemPattern));
+
+console.log();
+console.log('Filter item test');
+console.log(JSON.stringify(filter(testYarn, WorkItemPattern)));
+console.log(JSON.stringify(filter(testYarn, ActiveWorkItemPattern)));
