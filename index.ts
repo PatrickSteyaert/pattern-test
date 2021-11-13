@@ -5,38 +5,45 @@ import './style.css';
 const appDiv: HTMLElement = document.getElementById('app');
 appDiv.innerHTML = `<h1>Pattern test</h1>`;
 
-
-interface Pattern<T> { [key: string]: T; } ;
+interface Pattern<T> {
+  [key: string]: T;
+}
 
 type Strand = string | Pattern<Strand>;
-type Yarn = Array<Strand> ;
+type Yarn = Array<Strand>;
 
-type BaseClause = string | RegExp | Pattern<Filter> ;
-type OrClause = Set<BaseClause> ;
+type BaseClause = string | RegExp | Pattern<Filter>;
+type OrClause = Set<BaseClause>;
 
-type Filter = BaseClause | OrClause ;
+type Filter = BaseClause | OrClause;
 
-type MatchExpression = Map<BaseClause, any>;
+type Mapping = Map<BaseClause, any>;
 
-
-function orClause(...clauses: BaseClause[]): Filter {
+function choose(...clauses: BaseClause[]): Filter {
   return new Set(clauses);
 }
 
-function yarn(...strands: Strand[]): Yarn {
+function weave(...strands: Strand[]): Yarn {
   return strands;
+}
+
+function project(...pairs: [BaseClause, any][]): Mapping {
+  return new Map(pairs);
 }
 
 function isOrClause(filter: Filter): boolean {
   return filter instanceof Set;
 }
 
-function testPatterns(strand: Pattern<Strand>, clause: Pattern<Filter>): boolean {
+function testPatterns(
+  strand: Pattern<Strand>,
+  clause: Pattern<Filter>
+): boolean {
   let result = true;
   for (const key in clause) {
     if (clause.hasOwnProperty(key)) {
-      if (test(key, new Set(Object.keys(clause)))) {
-        result = result && test(strand[key], clause[key]);
+      if (testStrand(key, new Set(Object.keys(clause)))) {
+        result = result && testStrand(strand[key], clause[key]);
       }
     }
   }
@@ -46,10 +53,13 @@ function testPatterns(strand: Pattern<Strand>, clause: Pattern<Filter>): boolean
 function testBaseClause(strand: Strand, baseClause: BaseClause): boolean {
   if (typeof strand === 'string' && typeof baseClause === 'string') {
     return strand === baseClause;
-  } else if (typeof strand === 'string' && baseClause instanceof RegExp ) {
+  } else if (typeof strand === 'string' && baseClause instanceof RegExp) {
     return baseClause.test(strand);
   } else {
-    return 
+    return testPatterns(
+      strand as Pattern<Strand>,
+      baseClause as Pattern<Filter>
+    );
   }
 }
 
@@ -57,28 +67,32 @@ function testOrClause(strand: Strand, orClause: OrClause): boolean {
   if (orClause.has(strand)) {
     return true;
   } else {
-    return !!Array.from(orClause).find((clause) => test(strand, clause));
+    return !!Array.from(orClause).find((clause) => testStrand(strand, clause));
   }
 }
 
-function test(strand: Strand, filter: Filter): boolean {
+function testStrand(strand: Strand, filter: Filter): boolean {
   if (isOrClause(filter)) {
     return testOrClause(strand, filter as OrClause);
   } else {
-    return testBaseClause(strand, filter as BaseClause)
+    return testBaseClause(strand, filter as BaseClause);
   }
 }
 
-function filter(yarn: Yarn, filter: Filter): Yarn {
-  yarn.filter(strand => {
-    test(strand, filter)
-  })
+function filterYarn(yarn: Yarn, filter: Filter): Yarn {
+  return yarn.filter((strand) => testStrand(strand, filter));
+}
+
+function matchStrand(strand: Strand, matchExpression: Mapping): Yarn {
+  return Array.from(matchExpression).find((pair) =>
+    testStrand(strand, pair[0]) ? true : false
+  );
 }
 
 const sourceString: Strand = 's';
 const matchAll: BaseClause = /(.*?)/;
 
-console.log(match(sourceString, 'a'));
+console.log(testStrand(sourceString, 'a'));
 console.log(typeof ['a', 'b']);
 
 enum EntityType {
@@ -97,12 +111,17 @@ enum CoS {
 
 const WorkItemPattern: Filter = {
   entity: EntityType.WorkItem,
-  state: orClause(State.s1, State.s2),
+  state: choose(State.s1, State.s2),
 };
 
 const ActiveWorkItemPattern: Filter = {
   entity: EntityType.WorkItem,
-  state: orClause(State.s1),
+  state: choose(State.s1),
+};
+
+const InActiveWorkItemPattern: Filter = {
+  entity: EntityType.WorkItem,
+  state: choose(State.s2),
 };
 
 const activeWorkItem: Strand = {
@@ -115,18 +134,27 @@ const inActiveWorkItem: Strand = {
   state: State.s2,
 };
 
-const testYarn: Yarn = yarn(activeWorkItem, inActiveWorkItem)
+const allItems: Yarn = weave(activeWorkItem, inActiveWorkItem);
+
+const matcher: Mapping = project(
+  [ActiveWorkItemPattern, 'active'],
+  [InActiveWorkItemPattern, 'in-active']
+);
 
 console.log('Work item tests');
-console.log(test(activeWorkItem, WorkItemPattern));
-console.log(test(inActiveWorkItem, WorkItemPattern));
+console.log(testStrand(activeWorkItem, WorkItemPattern));
+console.log(testStrand(inActiveWorkItem, WorkItemPattern));
 
 console.log();
 console.log('Active item test');
-console.log(test(activeWorkItem, ActiveWorkItemPattern));
-console.log(test(inActiveWorkItem, ActiveWorkItemPattern));
+console.log(testStrand(activeWorkItem, ActiveWorkItemPattern));
+console.log(testStrand(inActiveWorkItem, ActiveWorkItemPattern));
 
 console.log();
 console.log('Filter item test');
-console.log(JSON.stringify(filter(testYarn, WorkItemPattern)));
-console.log(JSON.stringify(filter(testYarn, ActiveWorkItemPattern)));
+console.log(JSON.stringify(filterYarn(allItems, WorkItemPattern)));
+console.log(JSON.stringify(filterYarn(allItems, ActiveWorkItemPattern)));
+
+console.log('Matching test');
+console.log(JSON.stringify(matchStrand(activeWorkItem, matcher)));
+console.log(JSON.stringify(matchStrand(inActiveWorkItem, matcher)));
