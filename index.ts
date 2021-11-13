@@ -17,17 +17,21 @@ type OrClause = Set<BaseClause>;
 
 type Filter = BaseClause | OrClause;
 
-type Mapping = Map<BaseClause, any>;
+type Projection = Map<BaseClause, any>;
 
-function choose(...clauses: BaseClause[]): Filter {
+function chooseFrom(...clauses: BaseClause[]): Filter {
   return new Set(clauses);
 }
 
-function weave(...strands: Strand[]): Yarn {
+function choiceOf(clauses: {[key: string]: any}): Filter {
+  return new Set(Object.keys(clauses));
+}
+
+function weaveFrom(...strands: Strand[]): Yarn {
   return strands;
 }
 
-function project(...pairs: [BaseClause, any][]): Mapping {
+function mapFrom(...pairs: [BaseClause, any][]): Projection {
   return new Map(pairs);
 }
 
@@ -83,7 +87,7 @@ function filterYarn(yarn: Yarn, filter: Filter): Yarn {
   return yarn.filter((strand) => testStrand(strand, filter));
 }
 
-function matchStrand(strand: Strand, matchExpression: Mapping): Yarn {
+function matchStrand(strand: Strand, matchExpression: Projection): Yarn {
   return Array.from(matchExpression).find((pair) =>
     testStrand(strand, pair[0]) ? true : false
   );
@@ -111,17 +115,17 @@ enum CoS {
 
 const WorkItemPattern: Filter = {
   entity: EntityType.WorkItem,
-  state: choose(State.s1, State.s2),
+  state: choiceOf(State),
 };
 
 const ActiveWorkItemPattern: Filter = {
   entity: EntityType.WorkItem,
-  state: choose(State.s1),
+  state: chooseFrom(State.s1),
 };
 
 const InActiveWorkItemPattern: Filter = {
   entity: EntityType.WorkItem,
-  state: choose(State.s2),
+  state: chooseFrom(State.s2),
 };
 
 const activeWorkItem: Strand = {
@@ -134,9 +138,9 @@ const inActiveWorkItem: Strand = {
   state: State.s2,
 };
 
-const allItems: Yarn = weave(activeWorkItem, inActiveWorkItem);
+const allItems: Yarn = weaveFrom(activeWorkItem, inActiveWorkItem);
 
-const matcher: Mapping = project(
+const matcher: Projection = mapFrom(
   [ActiveWorkItemPattern, 'active'],
   [InActiveWorkItemPattern, 'in-active']
 );
