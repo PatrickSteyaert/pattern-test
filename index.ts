@@ -5,57 +5,65 @@ import './style.css';
 const appDiv: HTMLElement = document.getElementById('app');
 appDiv.innerHTML = `<h1>Pattern test</h1>`;
 
-interface Pattern<T> {
+export interface Pattern<T> {
   [key: string]: T;
 }
 
-type Strand = string | Pattern<Strand>;
-type Yarn = Array<Strand>;
+export type Strand = null | string | Pattern<Strand>;
+export type Yarn = Array<Strand>;
 
-type BaseClause = string | RegExp | Pattern<Filter>;
-type OrClause = Set<BaseClause>;
+export type BaseClause = null | string | RegExp | Pattern<Filter>;
+export type OrClause = Set<BaseClause>;
 
-type Filter = BaseClause | OrClause;
+export type Filter = BaseClause | OrClause;
 
-type Projection = Map<BaseClause, any>;
+export type Projection<R> = Map<BaseClause, R>;
+export type SortOrder = Projection<number>;
 
-function chooseFrom(...clauses: BaseClause[]): Filter {
+export function anyFromAll(clauses: { [key: string]: any }): Filter {
+  return new Set(Object.values(clauses));
+}
+
+export function anyOf(...clauses: BaseClause[]): Filter {
   return new Set(clauses);
 }
 
-function choiceOf(clauses: {[key: string]: any}): Filter {
-  return new Set(Object.keys(clauses));
-}
-
-function weaveFrom(...strands: Strand[]): Yarn {
+export function weaveFrom(...strands: Strand[]): Yarn {
   return strands;
 }
 
-function mapFrom(...pairs: [BaseClause, any][]): Projection {
+export function mapFrom<R>(...pairs: [BaseClause, R][]): Projection<R> {
   return new Map(pairs);
 }
 
-function isOrClause(filter: Filter): boolean {
+export function isOrClause(filter: Filter): boolean {
   return filter instanceof Set;
 }
 
-function testPatterns(
+export function testPatterns(
   strand: Pattern<Strand>,
   clause: Pattern<Filter>
 ): boolean {
   let result = true;
   for (const key in clause) {
     if (clause.hasOwnProperty(key)) {
-      if (testStrand(key, new Set(Object.keys(clause)))) {
+      if (strand[key] && testStrand(key, new Set(Object.keys(clause)))) {
         result = result && testStrand(strand[key], clause[key]);
+      } else {
+        result = false;
       }
     }
   }
   return result;
 }
 
-function testBaseClause(strand: Strand, baseClause: BaseClause): boolean {
-  if (typeof strand === 'string' && typeof baseClause === 'string') {
+export function testBaseClause(
+  strand: Strand,
+  baseClause: BaseClause
+): boolean {
+  if (baseClause === null) {
+    return strand === null || typeof strand === 'undefined';
+  } else if (typeof strand === 'string' && typeof baseClause === 'string') {
     return strand === baseClause;
   } else if (typeof strand === 'string' && baseClause instanceof RegExp) {
     return baseClause.test(strand);
@@ -67,7 +75,7 @@ function testBaseClause(strand: Strand, baseClause: BaseClause): boolean {
   }
 }
 
-function testOrClause(strand: Strand, orClause: OrClause): boolean {
+export function testOrClause(strand: Strand, orClause: OrClause): boolean {
   if (orClause.has(strand)) {
     return true;
   } else {
@@ -75,7 +83,7 @@ function testOrClause(strand: Strand, orClause: OrClause): boolean {
   }
 }
 
-function testStrand(strand: Strand, filter: Filter): boolean {
+export function testStrand(strand: Strand, filter: Filter): boolean {
   if (isOrClause(filter)) {
     return testOrClause(strand, filter as OrClause);
   } else {
@@ -83,16 +91,49 @@ function testStrand(strand: Strand, filter: Filter): boolean {
   }
 }
 
-function filterYarn(yarn: Yarn, filter: Filter): Yarn {
+export function filterYarn(yarn: Yarn, filter: Filter): Yarn {
   return yarn.filter((strand) => testStrand(strand, filter));
 }
 
-function matchStrand(strand: Strand, matchExpression: Projection): Yarn {
+export function filterObjects<T>(objects: T[], filter: Filter): T[] {
+  return filterYarn(objects as any as Yarn, filter) as any as T[];
+}
+
+export function matchStrand<R>(
+  strand: Strand,
+  matchExpression: Projection<R>
+): [BaseClause, R] {
   return Array.from(matchExpression).find((pair) =>
-    testStrand(strand, pair[0]) ? true : false
+    testStrand(strand, pair[0])
   );
 }
 
+export function matchObject<T, R>(
+  object: T,
+  matchExpression: Projection<R>
+): R {
+  return matchStrand(object as any as Strand, matchExpression)[1];
+}
+
+export function sortYarn(yarn: Yarn, sortOrder: SortOrder): Yarn {
+  return yarn.sort((c1, c2) =>
+    matchObject(c1, sortOrder) < matchObject(c2, sortOrder) ? -1 : 1
+  );
+}
+
+export function sortObjects<T>(objects: T[], sortOrder: SortOrder): T[] {
+  return sortYarn(objects as any as Yarn, sortOrder) as any as T[];
+}
+
+const noParticipant = { color: null };
+const redParticipant = { color: 'red' };
+const blueParticipant = { color: 'blue' };
+
+const noFilter = anyOf({ color: null });
+
+console.log(testStrand(noParticipant, noFilter));
+
+/*
 const sourceString: Strand = 's';
 const matchAll: BaseClause = /(.*?)/;
 
@@ -162,3 +203,4 @@ console.log(JSON.stringify(filterYarn(allItems, ActiveWorkItemPattern)));
 console.log('Matching test');
 console.log(JSON.stringify(matchStrand(activeWorkItem, matcher)));
 console.log(JSON.stringify(matchStrand(inActiveWorkItem, matcher)));
+*/
