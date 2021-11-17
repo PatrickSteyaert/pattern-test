@@ -129,8 +129,10 @@ const noParticipant = { color: null };
 const redParticipant = { color: 'red' };
 const blueParticipant = { color: 'blue' };
 
-const noFilter = anyOf({ color: null });
+const noFilter = anyOf(noParticipant);
+const redFilter = anyOf({ color: 'red' });
 
+console.log(testStrand(redParticipant, redFilter));
 console.log(testStrand(noParticipant, noFilter));
 
 /*
