@@ -5,12 +5,20 @@ import './style.css';
 const appDiv: HTMLElement = document.getElementById('app');
 appDiv.innerHTML = `<h1>Pattern test</h1>`;
 
+function log(t) {
+  console.log(t);
+  var tag = document.createElement('p');
+  var text = document.createTextNode(t);
+  tag.appendChild(text);
+  appDiv.appendChild(tag);
+}
+
 export interface Pattern<T> {
   [key: string]: T;
 }
 
-export type Strand = null | string | Pattern<Strand>;
-export type Yarn = Array<Strand>;
+export type Strand = null | string | Pattern<Yarn>;
+export type Yarn = Strand | Array<Strand>;
 
 export type BaseClause = null | string | RegExp | Pattern<Filter>;
 export type OrClause = Set<BaseClause>;
@@ -19,6 +27,10 @@ export type Filter = BaseClause | OrClause;
 
 export type Projection<R> = Map<BaseClause, R>;
 export type SortOrder = Projection<number>;
+
+function notString(s: string): BaseClause {
+  return new RegExp(`(?!${s})`);
+}
 
 export function anyFromAll(clauses: { [key: string]: any }): Filter {
   return new Set(Object.values(clauses));
@@ -46,12 +58,19 @@ export function testPatterns(
 ): boolean {
   let result = true;
   for (const key in clause) {
-    if (clause.hasOwnProperty(key)) {
+    if (clause.hasOwnProperty(key) && clause[key] !== null) {
       if (strand[key] && testStrand(key, new Set(Object.keys(clause)))) {
-        result = result && testStrand(strand[key], clause[key]);
+        result = result && testYarn(strand[key], clause[key]);
       } else {
         result = false;
       }
+    } else {
+      result =
+        result &&
+        ((clause[key] === null &&
+          (strand[key] === null || typeof strand[key] === 'undefined')) ||
+          (typeof clause[key] === 'function' &&
+            typeof strand[key] === 'function'));
     }
   }
   return result;
@@ -76,11 +95,7 @@ export function testBaseClause(
 }
 
 export function testOrClause(strand: Strand, orClause: OrClause): boolean {
-  if (orClause.has(strand)) {
-    return true;
-  } else {
-    return !!Array.from(orClause).find((clause) => testStrand(strand, clause));
-  }
+  return !!Array.from(orClause).find((clause) => testStrand(strand, clause));
 }
 
 export function testStrand(strand: Strand, filter: Filter): boolean {
@@ -91,8 +106,20 @@ export function testStrand(strand: Strand, filter: Filter): boolean {
   }
 }
 
+export function testYarn(yarn: Yarn, filter: Filter): boolean {
+  if (Array.isArray(yarn)) {
+    return yarn.some((strand) => testStrand(strand, filter));
+  } else {
+    return testStrand(yarn as Strand, filter);
+  }
+}
+
 export function filterYarn(yarn: Yarn, filter: Filter): Yarn {
-  return yarn.filter((strand) => testStrand(strand, filter));
+  if (Array.isArray(yarn)) {
+    return yarn.filter((strand) => testStrand(strand, filter));
+  } else {
+    return testStrand(yarn as Strand, filter) ? yarn : null;
+  }
 }
 
 export function filterObjects<T>(objects: T[], filter: Filter): T[] {
@@ -112,13 +139,20 @@ export function matchObject<T, R>(
   object: T,
   matchExpression: Projection<R>
 ): R {
-  return matchStrand(object as any as Strand, matchExpression)[1];
+  const result = matchStrand(object as any as Strand, matchExpression);
+  if (result) {
+    return result[1];
+  } else {
+    return null;
+  }
 }
 
 export function sortYarn(yarn: Yarn, sortOrder: SortOrder): Yarn {
-  return yarn.sort((c1, c2) =>
-    matchObject(c1, sortOrder) < matchObject(c2, sortOrder) ? -1 : 1
-  );
+  if (Array.isArray(yarn)) {
+    return yarn.sort((c1, c2) =>
+      matchObject(c1, sortOrder) < matchObject(c2, sortOrder) ? -1 : 1
+    );
+  }
 }
 
 export function sortObjects<T>(objects: T[], sortOrder: SortOrder): T[] {
@@ -132,8 +166,14 @@ const blueParticipant = { color: 'blue' };
 const noFilter = anyOf(noParticipant);
 const redFilter = anyOf({ color: 'red' });
 
-console.log(testStrand(redParticipant, redFilter));
-console.log(testStrand(noParticipant, noFilter));
+log(testStrand(redParticipant, redFilter));
+log(testStrand(noParticipant, redFilter));
+
+const notRed = notString('red');
+const notRedFilter = anyOf({ color: notRed });
+log(testStrand(blueParticipant, notRedFilter));
+
+log(testYarn([redParticipant, blueParticipant], notRedFilter));
 
 /*
 const sourceString: Strand = 's';
