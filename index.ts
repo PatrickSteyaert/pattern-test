@@ -175,6 +175,17 @@ log(testStrand(blueParticipant, notRedFilter));
 
 log(testYarn([redParticipant, blueParticipant], notRedFilter));
 
+enum state {
+  A = 'A',
+  B = 'B',
+}
+
+function linearOrder(e) {
+  return Object.keys(e).reduce( (acc, key, index) => ({...acc, [key]: index}), {});
+}
+
+log( JSON.stringify(linearOrder(state)));
+
 /*
 const sourceString: Strand = 's';
 const matchAll: BaseClause = /(.*?)/;
